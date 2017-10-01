@@ -1,67 +1,80 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Database.PostgreSQL.Simple.Monad (
-    PostgresDBM(..),
-    queryM,
-    executeM,
-    formatQueryM
+    PGDBM(..),
+    queryQ,
+    executeQ,
+    formatQueryQ,
+    PGDBTransM(..),
+    PGDBFoldM(..)
 ) where
 
-    import qualified Database.PostgreSQL.Simple as PSQL
+    import Control.Monad.IO.Class
+    import Control.Monad.Trans.Control
+    import Database.PostgreSQL.Simple.Monoid
     import Database.PostgreSQL.Simple.Types
     import Data.ByteString (ByteString)
-    import Data.String
-    import Data.Text (Text)
-    import Database.PostgreSQL.Simple.Monoid
+    import Data.Int (Int64)
+    import qualified Database.PostgreSQL.Simple as PSQL
+    import qualified Database.PostgreSQL.Simple.Copy as PSQL
+    import qualified Database.PostgreSQL.Simple.Cursor as PSQL
+    import qualified Database.PostgreSQL.Simple.Internal as PSQL
+    import qualified Database.PostgreSQL.Simple.LargeObjects as PSQL
+    import qualified Database.PostgreSQL.Simple.Notification as PSQL
+    import qualified Database.PostgreSQL.Simple.Transaction as PSQL
+    import System.Posix.Types (CPid)
 
-    class PostgresDBM m where
-        connectPostgreSQL :: ByteString -> m Connection
-        close :: Connection -> m ()
-        connect :: ConnectInfo -> m Connection
-        query :: (ToRow q, FromRow r) => Connection -> Query -> q -> m [r]
-        query_ :: FromRow r => Connection -> Query -> m [r]
-        queryWith :: ToRow q => RowParser r -> Connection -> Query -> q -> m [r]
-        queryWith_ :: RowParser r -> Connection -> Query -> m [r]
-        returning :: (ToRow q, FromRow r) => Connection -> Query -> [q] -> m [r]
-        returningWith :: ToRow q => RowParser r -> Connection -> Query -> [q] -> m [r]
-        execute :: ToRow q => Connection -> Query -> q -> m Int64
-        execute_ :: Connection -> Query -> m Int64
-        executeMany :: ToRow q => Connection -> Query -> [q] -> m Int64
-        begin :: Connection -> m ()
-        commit :: Connection -> m ()
-        rollback :: Connection -> m ()
-        formatMany :: ToRow q => Connection -> Query -> [q] -> m ByteString
-        formatQuery :: ToRow q => Connection -> Query -> q -> m ByteString
-        copy :: ToRow params => Connection -> Query -> params -> m ()
-        copy_ :: Connection -> Query -> m ()
-        getCopyData :: Connection -> m CopyOutResult
-        putCopyData :: Connection -> ByteString -> m ()
-        putCopyEnd :: Connection -> m Int64
-        putCopyError :: Connection -> ByteString -> m ()
-        declareCursor :: Connection -> Query -> m Cursor
-        closeCursor :: Cursor -> m ()
-        loCreat :: Connection -> m Oid 
-        loCreate :: Connection -> Oid -> m Oid 
-        loImport :: Connection -> FilePath -> m Oid 
-        loImportWithOid :: Connection -> FilePath -> Oid -> m Oid 
-        loExport :: Connection -> Oid -> FilePath -> m () 
-        loOpen :: Connection -> Oid -> IOMode -> m LoFd 
-        loWrite :: Connection -> LoFd -> ByteString -> m Int 
-        loRead :: Connection -> LoFd -> Int -> m ByteString 
-        loSeek :: Connection -> LoFd -> SeekMode -> Int -> m Int 
-        loTell :: Connection -> LoFd -> m Int 
-        loTruncate :: Connection -> LoFd -> Int -> m () 
-        loClose :: Connection -> LoFd -> m () 
-        loUnlink :: Connection -> Oid -> m ()
-        getNotification :: Connection -> m Notification
-        getNotificationNonBlocking :: Connection -> m (Maybe Notification)
-        getBackendPID :: Connection -> m CPid
-        beginLevel :: IsolationLevel -> Connection -> m ()
-        beginMode :: TransactionMode -> Connection -> m ()
-        newSavepoint :: Connection -> m Savepoint
-        releaseSavepoint :: Connection -> Savepoint -> m ()
-        rollbackToSavepoint :: Connection -> Savepoint -> m ()
-        rollbackToAndReleaseSavepoint :: Connection -> Savepoint -> m ()
+    class PGDBM m where
+        connectPostgreSQL :: ByteString -> m PSQL.Connection
+        close :: PSQL.Connection -> m ()
+        connect :: PSQL.ConnectInfo -> m PSQL.Connection
+        query :: (PSQL.ToRow q, PSQL.FromRow r) => PSQL.Connection -> Query -> q -> m [r]
+        query_ :: PSQL.FromRow r => PSQL.Connection -> Query -> m [r]
+        queryWith :: PSQL.ToRow q => PSQL.RowParser r -> PSQL.Connection -> Query -> q -> m [r]
+        queryWith_ :: PSQL.RowParser r -> PSQL.Connection -> Query -> m [r]
+        returning :: (PSQL.ToRow q, PSQL.FromRow r) => PSQL.Connection -> Query -> [q] -> m [r]
+        returningWith :: PSQL.ToRow q => PSQL.RowParser r -> PSQL.Connection -> Query -> [q] -> m [r]
+        execute :: PSQL.ToRow q => PSQL.Connection -> Query -> q -> m Int64
+        execute_ :: PSQL.Connection -> Query -> m Int64
+        executeMany :: PSQL.ToRow q => PSQL.Connection -> Query -> [q] -> m Int64
+        begin :: PSQL.Connection -> m ()
+        commit :: PSQL.Connection -> m ()
+        rollback :: PSQL.Connection -> m ()
+        formatMany :: PSQL.ToRow q => PSQL.Connection -> Query -> [q] -> m ByteString
+        formatQuery :: PSQL.ToRow q => PSQL.Connection -> Query -> q -> m ByteString
+        copy :: PSQL.ToRow params => PSQL.Connection -> Query -> params -> m ()
+        copy_ :: PSQL.Connection -> Query -> m ()
+        getCopyData :: PSQL.Connection -> m PSQL.CopyOutResult
+        putCopyData :: PSQL.Connection -> ByteString -> m ()
+        putCopyEnd :: PSQL.Connection -> m Int64
+        putCopyError :: PSQL.Connection -> ByteString -> m ()
+        declareCursor :: PSQL.Connection -> Query -> m PSQL.Cursor
+        closeCursor :: PSQL.Cursor -> m ()
+        loCreat :: PSQL.Connection -> m Oid 
+        loCreate :: PSQL.Connection -> Oid -> m Oid 
+        loImport :: PSQL.Connection -> FilePath -> m Oid 
+        loImportWithOid :: PSQL.Connection -> FilePath -> Oid -> m Oid 
+        loExport :: PSQL.Connection -> Oid -> FilePath -> m () 
+        loOpen :: PSQL.Connection -> Oid -> PSQL.IOMode -> m PSQL.LoFd 
+        loWrite :: PSQL.Connection -> PSQL.LoFd -> ByteString -> m Int 
+        loRead :: PSQL.Connection -> PSQL.LoFd -> Int -> m ByteString 
+        loSeek :: PSQL.Connection -> PSQL.LoFd -> PSQL.SeekMode -> Int -> m Int 
+        loTell :: PSQL.Connection -> PSQL.LoFd -> m Int 
+        loTruncate :: PSQL.Connection -> PSQL.LoFd -> Int -> m () 
+        loClose :: PSQL.Connection -> PSQL.LoFd -> m () 
+        loUnlink :: PSQL.Connection -> Oid -> m ()
+        getNotification :: PSQL.Connection -> m PSQL.Notification
+        getNotificationNonBlocking :: PSQL.Connection -> m (Maybe PSQL.Notification)
+        getBackendPID :: PSQL.Connection -> m CPid
+        beginLevel :: PSQL.IsolationLevel -> PSQL.Connection -> m ()
+        beginMode :: PSQL.TransactionMode -> PSQL.Connection -> m ()
+        newSavepoint :: PSQL.Connection -> m Savepoint
+        releaseSavepoint :: PSQL.Connection -> Savepoint -> m ()
+        rollbackToSavepoint :: PSQL.Connection -> Savepoint -> m ()
+        rollbackToAndReleaseSavepoint :: PSQL.Connection -> Savepoint -> m ()
 
     liftIO1 :: MonadIO m => (a -> IO z) -> a -> m z
     liftIO1 f a = liftIO $ f a
@@ -75,7 +88,7 @@ module Database.PostgreSQL.Simple.Monad (
     liftIO4 :: MonadIO m => (a -> b -> c -> d -> IO z) -> a -> b -> c -> d -> m z
     liftIO4 f a b c d = liftIO $ f a b c d
 
-    instance MonadIO m => PostgresDBM m where
+    instance MonadIO m => PGDBM m where
         connectPostgreSQL = liftIO1 PSQL.connectPostgreSQL
         close = liftIO1 PSQL.close
         connect = liftIO1 PSQL.connect
@@ -96,7 +109,7 @@ module Database.PostgreSQL.Simple.Monad (
         copy = liftIO3 PSQL.copy
         copy_ = liftIO2 PSQL.copy_
         getCopyData = liftIO1 PSQL.getCopyData
-        putCopyData = liftIO1 PSQL.putCopyData
+        putCopyData = liftIO2 PSQL.putCopyData
         putCopyEnd = liftIO1 PSQL.putCopyEnd
         putCopyError = liftIO2 PSQL.putCopyError
         declareCursor = liftIO2 PSQL.declareCursor
@@ -124,37 +137,37 @@ module Database.PostgreSQL.Simple.Monad (
         rollbackToSavepoint = liftIO2 PSQL.rollbackToSavepoint
         rollbackToAndReleaseSavepoint = liftIO2 PSQL.rollbackToAndReleaseSavepoint
 
-    queryM :: (PostgresDBM m, FromRow r) => Connection -> Qry -> m [r]
-    queryM conn q = if Prelude.null (fields q)
+    queryQ :: (PGDBM m, PSQL.FromRow r) => PSQL.Connection -> Qry -> m [r]
+    queryQ conn q = if Prelude.null (fields q)
                     then query_ conn (qry q)
                     else query conn (qry q) (fields q)
 
-    executeM :: (PostgresDBM m, FromRow r) => Connection -> Qry -> m [r]
-    executeM conn q = if Prelude.null (field q)
+    executeQ :: PGDBM m => PSQL.Connection -> Qry -> m Int64
+    executeQ conn q = if Prelude.null (fields q)
                         then execute_ conn (qry q)
                         else execute conn (qry q) (fields q)
 
-    formatQueryM :: PostgresDBM m => Connection -> Qry -> m ByteString
-    formatQueryM conn q = formatQuery conn (qry q) (fields q)
+    formatQueryQ :: PGDBM m => PSQL.Connection -> Qry -> m ByteString
+    formatQueryQ conn q = formatQuery conn (qry q) (fields q)
 
-    class PostgresDBM m => PostgresDBTransM m where
-        withTransaction :: Connection -> m a -> m a
-        withSavepoint :: Connection -> m a -> m a
-        withTransactionLevel :: IsolationLevel -> Connection -> m a -> m a
-        withTransactionMode :: TransactionMode -> Connection -> m a -> m a
-        withTransactionModeRetry :: TransactionMode -> (SqlError -> Bool) -> Connection -> m a -> m a
-        withTransactionSerializable :: Connection -> m a -> m a
+    class PGDBM m => PGDBTransM m where
+        withTransaction :: PSQL.Connection -> m a -> m a
+        withSavepoint :: PSQL.Connection -> m a -> m a
+        withTransactionLevel :: PSQL.IsolationLevel -> PSQL.Connection -> m a -> m a
+        withTransactionMode :: PSQL.TransactionMode -> PSQL.Connection -> m a -> m a
+        withTransactionModeRetry :: PSQL.TransactionMode -> (PSQL.SqlError -> Bool) -> PSQL.Connection -> m a -> m a
+        withTransactionSerializable :: PSQL.Connection -> m a -> m a
 
-    transIO1 :: MonadBaseControl IO m :: (a -> IO z -> IO z) -> a -> m z -> m z
+    transIO1 :: MonadBaseControl IO m => (a -> IO (StM m z) -> IO (StM m z)) -> a -> m z -> m z
     transIO1 f a z = control $ \rib -> f a (rib z)
 
-    transIO2 :: MonadBaseControl IO m :: (a -> b -> IO z -> IO z) -> a -> b -> m z -> m z
+    transIO2 :: MonadBaseControl IO m => (a -> b -> IO (StM m z) -> IO (StM m z)) -> a -> b -> m z -> m z
     transIO2 f a b z = control $ \rib -> f a b (rib z)
 
-    transIO3 :: MonadBaseControl IO m :: (a -> b -> c -> IO z -> IO z) -> a -> b -> c -> m z -> m z
+    transIO3 :: MonadBaseControl IO m => (a -> b -> c -> IO (StM m z) -> IO (StM m z)) -> a -> b -> c -> m z -> m z
     transIO3 f a b c z = control $ \rib -> f a b c (rib z)
 
-    instance MonadBaseControl IO m => PostgresDBTransM where
+    instance (MonadIO m, MonadBaseControl IO m) => PGDBTransM m where
         withTransaction = transIO1 PSQL.withTransaction
         withSavepoint = transIO1 PSQL.withSavepoint
         withTransactionLevel = transIO2 PSQL.withTransactionLevel
@@ -162,28 +175,49 @@ module Database.PostgreSQL.Simple.Monad (
         withTransactionModeRetry = transIO3 PSQL.withTransactionModeRetry
         withTransactionSerializable = transIO1 PSQL.withTransactionSerializable
 
-    class PostgresDBM m => PostgresDBFoldM m where
+    class PGDBM m => PGDBFoldM m where
         type FoldM m :: * -> *
-        fold :: (FromRow row, ToRow params) => Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
-        foldWithOptions :: (FromRow row, ToRow params) => FoldOptions -> Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
-        fold_ :: FromRow r => Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
-        foldWithOptions_ :: FromRow r => FoldOptions -> Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
-        forEach :: (ToRow q, FromRow r) => Connection -> Query -> q -> (r -> FoldM m ()) -> m () 
-        forEach_ :: FromRow r => Connection -> Query -> (r -> FoldM m ()) -> m () 
-        foldWith :: ToRow params => RowParser row -> Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
-        foldWithOptionsAndParser :: ToRow params => FoldOptions -> RowParser row -> Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
-        foldWith_ :: RowParser r -> Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a
-        foldWithOptionsAndParser_ :: FoldOptions -> RowParser r -> Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
-        forEachWith :: ToRow q => RowParser r -> Connection -> Query -> q -> (r -> FoldM m ()) -> m ()
-        forEachWith_ :: RowParser r -> Connection -> Query -> (r -> FoldM m ()) -> m ()
-        foldForward :: FromRow r => Cursor -> Int -> (a -> r -> FoldM m a) -> a -> m (Either a a)
-        foldForwardWithParser :: Cursor -> RowParser r -> Int -> (a -> r -> FoldM m a) -> a -> m (Either a a)
+        fold :: (PSQL.FromRow row, PSQL.ToRow params) => PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
+        foldWithOptions :: (PSQL.FromRow row, PSQL.ToRow params) => PSQL.FoldOptions -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
+        fold_ :: PSQL.FromRow r => PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
+        foldWithOptions_ :: PSQL.FromRow r => PSQL.FoldOptions -> PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
+        forEach :: (PSQL.ToRow q, PSQL.FromRow r) => PSQL.Connection -> Query -> q -> (r -> FoldM m ()) -> m () 
+        forEach_ :: PSQL.FromRow r => PSQL.Connection -> Query -> (r -> FoldM m ()) -> m () 
+        foldWith :: PSQL.ToRow params => PSQL.RowParser row -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
+        foldWithOptionsAndParser :: PSQL.ToRow params => PSQL.FoldOptions -> PSQL.RowParser row -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
+        foldWith_ :: PSQL.RowParser r -> PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a
+        foldWithOptionsAndParser_ :: PSQL.FoldOptions -> PSQL.RowParser r -> PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
+        forEachWith :: PSQL.ToRow q => PSQL.RowParser r -> PSQL.Connection -> Query -> q -> (r -> FoldM m ()) -> m ()
+        forEachWith_ :: PSQL.RowParser r -> PSQL.Connection -> Query -> (r -> FoldM m ()) -> m ()
+        -- These two functions are hard to implement at the moment,
+        -- for complicated reasons I'll admit I don't fully understand.
+        -- In the future they will be.
+        -- foldForward :: PSQL.FromRow r => PSQL.Cursor -> Int -> (a -> r -> FoldM m a) -> a -> m (Either a a)
+        -- foldForwardWithParser :: PSQL.Cursor -> PSQL.RowParser r -> Int -> (a -> r -> FoldM m a) -> a -> m (Either a a)
 
-    instance MonadBaseControl IO m => PostgresDBFoldM m where
+    foldIO :: MonadBaseControl IO m => (StM m a -> (StM m a -> r -> IO (StM m a)) -> IO (StM m a)) -> a -> (a -> r -> m a) -> m a
+    foldIO f a g = control $ \rib -> do
+                        i <- rib $ return a
+                        f i $ \ sb r -> rib $ do
+                                                    s <- restoreM sb
+                                                    g s r
+
+    instance (MonadIO m, MonadBaseControl IO m) => PGDBFoldM m where
         type FoldM m = m
 
-        fold c q p x f = control $ \rib -> do
-                                    init <- rib $ return x
-                                    fold c q p init $ \ sb r -> rib $ do
-                                                            s <- restoreM sb
-                                                            f s r
+        fold c q p = foldIO (PSQL.fold c q p)
+        foldWithOptions o c q p = foldIO (PSQL.foldWithOptions o c q p)
+        fold_ c q = foldIO (PSQL.fold_ c q)
+        foldWithOptions_ o c q = foldIO (PSQL.foldWithOptions_ o c q) 
+
+        forEach c q p f = foldIO (PSQL.fold c q p) () (const f)
+        forEach_ c q f = foldIO (PSQL.fold_ c q) () (const f)
+
+        foldWith rp c q p = foldIO (PSQL.foldWith rp c q p)
+        foldWithOptionsAndParser o rp c q p = foldIO (PSQL.foldWithOptionsAndParser o rp c q p)
+        foldWith_ rp c q  = foldIO (PSQL.foldWith_ rp c q)
+        foldWithOptionsAndParser_ fo rp c q = foldIO (PSQL.foldWithOptionsAndParser_ fo rp c q)
+
+        forEachWith rp c q p f = foldIO (PSQL.foldWith rp c q p) () (const f)
+        forEachWith_ rp c q f = foldIO (PSQL.foldWith_ rp c q) () (const f)
+

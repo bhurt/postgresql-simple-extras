@@ -1,5 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Database.PostgreSQL.Simple.Monoid (
-    Qry,
+    Qry(..),
     value,
     identifier
 ) where
@@ -7,7 +9,6 @@ module Database.PostgreSQL.Simple.Monoid (
     import Database.PostgreSQL.Simple
     import Database.PostgreSQL.Simple.ToField
     import Database.PostgreSQL.Simple.Types
-    import Data.ByteString (ByteString)
     import Data.String
     import Data.Text (Text)
 
@@ -44,4 +45,4 @@ module Database.PostgreSQL.Simple.Monoid (
                 }
 
     identifier :: Text -> Qry
-    identifier i = value . Identifier
+    identifier = value . Identifier

@@ -18,8 +18,12 @@ library
   exposed-modules:     Database.PostgreSQL.Simple.Monoid
                         , Database.PostgreSQL.Simple.Monad
   build-depends:       base >= 4.7 && < 5
-                        , postgresql-simple
+                        , bytestring >= 0.10
+                        , monad-control >= 1.0
+                        , postgresql-simple >= 0.5
+                        , text >= 1.2
   default-language:    Haskell2010
+  ghc-options:         -O2 -W -Wall
 
 source-repository head
   type:     git
