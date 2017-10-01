@@ -8,8 +8,16 @@ module Database.PostgreSQL.Simple.Monad (
     queryQ,
     executeQ,
     formatQueryQ,
+    queryWithQ,
+    copyQ,
     PGDBTransM(..),
-    PGDBFoldM(..)
+    PGDBFoldM(..),
+    foldQ,
+    foldWithOptionsQ,
+    forEachQ,
+    foldWithQ,
+    foldWithOptionsAndParserQ,
+    forEachWithQ
 ) where
 
     import Control.Monad.IO.Class
@@ -138,17 +146,27 @@ module Database.PostgreSQL.Simple.Monad (
         rollbackToAndReleaseSavepoint = liftIO2 PSQL.rollbackToAndReleaseSavepoint
 
     queryQ :: (PGDBM m, PSQL.FromRow r) => PSQL.Connection -> Qry -> m [r]
-    queryQ conn q = if Prelude.null (fields q)
-                    then query_ conn (qry q)
-                    else query conn (qry q) (fields q)
+    queryQ conn q
+        | Prelude.null (fields q) = query_ conn (qry q)
+        | otherwise               = query  conn (qry q) (fields q)
 
     executeQ :: PGDBM m => PSQL.Connection -> Qry -> m Int64
-    executeQ conn q = if Prelude.null (fields q)
-                        then execute_ conn (qry q)
-                        else execute conn (qry q) (fields q)
+    executeQ conn q
+        | Prelude.null (fields q) = execute_ conn (qry q)
+        | otherwise               = execute  conn (qry q) (fields q)
 
     formatQueryQ :: PGDBM m => PSQL.Connection -> Qry -> m ByteString
     formatQueryQ conn q = formatQuery conn (qry q) (fields q)
+
+    queryWithQ :: PGDBM m =>  PSQL.RowParser r -> PSQL.Connection -> Qry -> m [r]
+    queryWithQ rp conn q 
+        | Prelude.null (fields q) = queryWith_ rp conn (qry q)
+        | otherwise               = queryWith  rp conn (qry q) (fields q)
+
+    copyQ :: PGDBM m => PSQL.Connection -> Qry -> m ()
+    copyQ conn q
+        | Prelude.null (fields q) = copy_ conn (qry q)
+        | otherwise               = copy  conn (qry q) (fields q)
 
     class PGDBM m => PGDBTransM m where
         withTransaction :: PSQL.Connection -> m a -> m a
@@ -178,14 +196,14 @@ module Database.PostgreSQL.Simple.Monad (
     class PGDBM m => PGDBFoldM m where
         type FoldM m :: * -> *
         fold :: (PSQL.FromRow row, PSQL.ToRow params) => PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
-        foldWithOptions :: (PSQL.FromRow row, PSQL.ToRow params) => PSQL.FoldOptions -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
         fold_ :: PSQL.FromRow r => PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
+        foldWithOptions :: (PSQL.FromRow row, PSQL.ToRow params) => PSQL.FoldOptions -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
         foldWithOptions_ :: PSQL.FromRow r => PSQL.FoldOptions -> PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
         forEach :: (PSQL.ToRow q, PSQL.FromRow r) => PSQL.Connection -> Query -> q -> (r -> FoldM m ()) -> m () 
         forEach_ :: PSQL.FromRow r => PSQL.Connection -> Query -> (r -> FoldM m ()) -> m () 
         foldWith :: PSQL.ToRow params => PSQL.RowParser row -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
-        foldWithOptionsAndParser :: PSQL.ToRow params => PSQL.FoldOptions -> PSQL.RowParser row -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
         foldWith_ :: PSQL.RowParser r -> PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a
+        foldWithOptionsAndParser :: PSQL.ToRow params => PSQL.FoldOptions -> PSQL.RowParser row -> PSQL.Connection -> Query -> params -> a -> (a -> row -> FoldM m a) -> m a
         foldWithOptionsAndParser_ :: PSQL.FoldOptions -> PSQL.RowParser r -> PSQL.Connection -> Query -> a -> (a -> r -> FoldM m a) -> m a 
         forEachWith :: PSQL.ToRow q => PSQL.RowParser r -> PSQL.Connection -> Query -> q -> (r -> FoldM m ()) -> m ()
         forEachWith_ :: PSQL.RowParser r -> PSQL.Connection -> Query -> (r -> FoldM m ()) -> m ()
@@ -194,6 +212,36 @@ module Database.PostgreSQL.Simple.Monad (
         -- In the future they will be.
         -- foldForward :: PSQL.FromRow r => PSQL.Cursor -> Int -> (a -> r -> FoldM m a) -> a -> m (Either a a)
         -- foldForwardWithParser :: PSQL.Cursor -> PSQL.RowParser r -> Int -> (a -> r -> FoldM m a) -> a -> m (Either a a)
+
+    foldQ :: (PSQL.FromRow row, PGDBFoldM m) => PSQL.Connection -> Qry -> a -> (a -> row -> FoldM m a) -> m a
+    foldQ conn q
+        | Prelude.null (fields q) = fold_ conn (qry q)
+        | otherwise               = fold  conn (qry q) (fields q)
+
+    foldWithOptionsQ :: (PSQL.FromRow row, PGDBFoldM m) => PSQL.FoldOptions -> PSQL.Connection -> Qry -> a -> (a -> row -> FoldM m a) -> m a
+    foldWithOptionsQ fo conn q
+        | Prelude.null (fields q) = foldWithOptions_ fo conn (qry q)
+        | otherwise               = foldWithOptions  fo conn (qry q) (fields q)
+
+    forEachQ :: (PSQL.FromRow r, PGDBFoldM m) => PSQL.Connection -> Qry -> (r -> FoldM m ()) -> m () 
+    forEachQ conn q
+        | Prelude.null (fields q) = forEach_ conn (qry q)
+        | otherwise               = forEach  conn (qry q) (fields q)
+
+    foldWithQ :: PGDBFoldM m => PSQL.RowParser row -> PSQL.Connection -> Qry -> a -> (a -> row -> FoldM m a) -> m a
+    foldWithQ rp conn q
+        | Prelude.null (fields q) = foldWith_ rp conn (qry q)
+        | otherwise               = foldWith  rp conn (qry q) (fields q)
+
+    foldWithOptionsAndParserQ :: PGDBFoldM m => PSQL.FoldOptions -> PSQL.RowParser row -> PSQL.Connection -> Qry -> a -> (a -> row -> FoldM m a) -> m a
+    foldWithOptionsAndParserQ fo rp conn q
+        | Prelude.null (fields q) = foldWithOptionsAndParser_ fo rp conn (qry q)
+        | otherwise               = foldWithOptionsAndParser  fo rp conn (qry q) (fields q)
+
+    forEachWithQ :: PGDBFoldM m => PSQL.RowParser r -> PSQL.Connection -> Qry -> (r -> FoldM m ()) -> m ()
+    forEachWithQ rp conn q
+        | Prelude.null (fields q) = forEachWith_ rp conn (qry q)
+        | otherwise               = forEachWith  rp conn (qry q) (fields q)
 
     foldIO :: MonadBaseControl IO m => (StM m a -> (StM m a -> r -> IO (StM m a)) -> IO (StM m a)) -> a -> (a -> r -> m a) -> m a
     foldIO f a g = control $ \rib -> do
